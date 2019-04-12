@@ -2,6 +2,7 @@ import numpy as np
 from operator import add
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import norm
+import math
 
 from utils import sign
 
@@ -10,18 +11,37 @@ class SVM:
         self.__learning_rate = learning_rate
         self.__lambda_reg = lambda_reg
         self.__dim = dim
+        self.__persistence = 15
+        #self.__epsilon = 1e-4
         # initialize weights
         self.__w = np.zeros(dim)
 
     def fit(self, data, validation, max_iter, batch_size=100):
+        reached_criterion = False
+        early_stopping_window = []
+        window_smallest = math.inf
         for i in range(max_iter):
-            grad, train_loss = self.step(data.sample(False, 0.01))
-            self.__w += self.__learning_rate*grad.toarray().ravel()
-            #train_accuracy = self.predict(data) #, train_accuracy : {train_accuracy:.2f},
-            validation_loss = validation.map(
-                lambda x: self.loss(x[0], x[1])).reduce(add)
-            validation_accuracy = self.predict(validation)
-            print(f'''iter : {i:3d}, avg_train_loss : {train_loss:.4f} validation_loss : {validation_loss:.2f}, validation_accuracy : {validation_accuracy}''')
+            if(not reached_criterion) :
+                grad, train_loss = self.step(data.sample(False, 0.01))
+                self.__w += self.__learning_rate*grad.toarray().ravel()
+                #train_accuracy = self.predict(data) #, train_accuracy : {train_accuracy:.2f},
+                validation_loss = validation.map(
+                    lambda x: self.loss(x[0], x[1])).reduce(add)
+                validation_accuracy = self.predict(validation)
+                print(f'''iter : {i:3d}, avg_train_loss : {train_loss:.4f} validation_loss : {validation_loss:.2f},\
+                        validation_accuracy : {validation_accuracy}''')
+
+                if(len(early_stopping_window) == self.__persistence) :
+                    early_stopping_window = early_stopping_window[1:]
+                    early_stopping_window.append(validation_loss)
+                    if(min(early_stopping_window) > window_smallest):
+                        reached_criterion = True
+                        print('reached early stopping criterion')
+                    window_smallest = min(early_stopping_window)
+                else :
+                    early_stopping_window.append(validation_loss)
+
+
 
     def step(self, data):
         '''

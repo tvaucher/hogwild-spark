@@ -1,4 +1,4 @@
-path = '..'
+path = 'C:/Users/patrik/Desktop/EPFL/system/data'
 
 dim = 47238
 learning_rate = 0.015

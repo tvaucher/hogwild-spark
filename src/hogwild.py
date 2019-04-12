@@ -8,6 +8,8 @@ from os import path
 from operator import add
 from pyspark.sql import SparkSession
 
+import csv
+
 from svm import SVM
 import settings as s
 
@@ -22,6 +24,23 @@ def line_to_features(r):
     row_idx = np.array([0]*(len(features) + 1))
     data = np.array([1.] + [float(value) for _, value in features])
     return int(r[0]), csr_matrix((data, (row_idx, col_idx)), shape=(1, s.dim))
+
+def grid_search(training_set, validation_set, learning_rates, batch_sizes, lambdas):
+
+    values = []
+    for learning_rate in learning_rates:
+        for batch_size in batch_sizes:
+            for lambda_reg in lambdas:
+                print("new epoch")
+                model = SVM(learning_rate, lambda_reg, s.dim)
+                model.fit(training_set, validation_set, 10, batch_size=batch_size)
+                accuracy = model.predict(validation_set)
+                values.append((learning_rate, batch_size, lambda_reg, accuracy))
+    #ind = np.argmax(list(map(lambda x : x[3], values)))
+
+    with open('grid_search_results.txt', 'w') as f:
+        writer = csv.writer(f)
+        writer.writerows(values)
 
 if __name__ == "__main__":
     spark = SparkSession\
@@ -49,5 +68,11 @@ if __name__ == "__main__":
     model = SVM(s.learning_rate, s.lambda_reg, s.dim)
     model.fit(training_set, validation_set, 100)
     print('accuracy', model.predict(training_set))
+
+    learning_rates = [0.015, 0.020]
+    batch_sizes = [10]
+    lambdas =  [1e-5, 1e-4]
+
+    #grid_search(training_set, validation_set, learning_rates, batch_sizes, lambdas)
 
     spark.stop()
