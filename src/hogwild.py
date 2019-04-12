@@ -47,7 +47,7 @@ if __name__ == "__main__":
     """test_set = test_lines.rdd.map(line_to_features).join(doc_category).map(lambda x : (x[1][0], x[1][1])).persist()"""
 
     model = SVM(s.learning_rate, s.lambda_reg, s.dim)
-    model.fit(training_set, 100)
+    model.fit(training_set, validation_set, 100)
     print('accuracy', model.predict(training_set))
 
     spark.stop()

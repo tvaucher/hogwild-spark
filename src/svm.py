@@ -5,7 +5,6 @@ from scipy.sparse.linalg import norm
 
 from utils import sign
 
-
 class SVM:
     def __init__(self, learning_rate, lambda_reg, dim):
         self.__learning_rate = learning_rate
@@ -14,13 +13,15 @@ class SVM:
         # initialize weights
         self.__w = np.zeros(dim)
 
-    def fit(self, data, max_iter, batch_size=100):
+    def fit(self, data, validation, max_iter, batch_size=100):
         for i in range(max_iter):
-            print(
-                f'accuracy before iter {i} : accuracy : {self.predict(data):.2f}')
             grad, train_loss = self.step(data.sample(False, 0.01))
             self.__w += self.__learning_rate*grad.toarray().ravel()
-            print(f'iter : {i}, loss : {train_loss}')
+            #train_accuracy = self.predict(data) #, train_accuracy : {train_accuracy:.2f},
+            validation_loss = validation.map(
+                lambda x: self.loss(x[0], x[1])).reduce(add)
+            validation_accuracy = self.predict(validation)
+            print(f'''iter : {i:3d}, avg_train_loss : {train_loss:.4f} validation_loss : {validation_loss:.2f}, validation_accuracy : {validation_accuracy}''')
 
     def step(self, data):
         '''
@@ -34,7 +35,7 @@ class SVM:
         return gradient, train_loss
 
     def calculate_grad_loss(self, x, label):
-        xw = x.dot(self.__w)
+        xw = x.dot(self.__w)[0]
         if self.__misclassification(xw, label):
             delta_w = self.__gradient(x, label)
         else:
@@ -43,7 +44,7 @@ class SVM:
 
     def loss(self, x, label, xw=None):
         if xw is None:
-            xw = x.dot(self.__w)
+            xw = x.dot(self.__w)[0]
         return max(1 - label * xw, 0) + self.__regularizer(x)
 
     def __regularizer(self, x):
