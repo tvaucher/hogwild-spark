@@ -1,15 +1,26 @@
 GROUP_NAME=cs449g13
-APP_NAME=spark-svm
+APP_NAME=svm-spark
 NB_EXECUTOR=4
-IMAGE=tvaucher/svm-spark:run1
+REPO=tvaucher
+TAG=latest
 
-while getopts ":n:" opt; do
+while getopts ":w:n:t:b" opt; do
   case $opt in
-    n) NB_EXECUTOR="$OPTARG";; # number workers
+    w) NB_EXECUTOR="$OPTARG";; # number workers
+    n) APP_NAME="$OPTARG";; # Name of the app
+    t) TAG="$OPTARG";; # tag
+    b) BUILD=1 ;; # Should we build the image or not
     \?) echo "Invalid option -$OPTARG" >&2
     ;;
   esac
 done
+
+IMAGE=$REPO/$APP_NAME:$TAG
+if [ -n "$BUILD" ] ; then
+    bash docker-image-tool.sh -r $REPO -a $APP_NAME -t $TAG build
+    bash docker-image-tool.sh -r $REPO -a $APP_NAME -t $TAG push
+    sleep 1
+fi;
 
 kubectl delete pod $APP_NAME
 spark-submit \
