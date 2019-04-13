@@ -14,7 +14,12 @@ class SVM:
         self.__persistence = 20
         self.__w = np.zeros(dim)
 
+    def getW(self):
+        ''' Return the weight vector '''
+        return self.__w
+
     def fit(self, data, validation, max_iter, spark):
+        ''' Fit the data using the validation set over max_iter or less if it converges earlier '''
         reached_criterion = False
         early_stopping_window = []
         window_smallest = math.inf
@@ -28,13 +33,13 @@ class SVM:
                 self.__w -= self.__learning_rate * (grad.toarray().ravel() + self.l2_reg_grad(w_bc))
                 w_bc = spark.sparkContext.broadcast(self.__w)
                 # Compute validation loss and accuracy
-                validation_loss = self.loss(validation, w_bc)
+                validation_loss = self.loss(validation, w_bc=w_bc)
                 validation_accuracy = self.predict(validation, w_bc=w_bc)
 
                 # Logging
                 log_iter = {'iter': i, 'avg_train_loss': train_loss,
                             'validation_loss': validation_loss, 'validation_accuracy': validation_accuracy}
-                print(log_iter)
+                # print(log_iter)
                 log.append(log_iter)
 
                 # Early stopping criterion
@@ -52,8 +57,7 @@ class SVM:
 
     def step(self, data, w_bc):
         '''
-        Calculates the gradient and train loss.
-        If the update flag is set to False, gradient is calculated but own weights will not be updated
+        Calculates the gradient and train loss. Add regularizer to the train loss
         '''
         calculate_grad_loss = self.calculate_grad_loss
         gradient, train_loss = data.map(lambda x: calculate_grad_loss(
@@ -63,6 +67,7 @@ class SVM:
         return gradient, train_loss + self.l2_reg(w_bc)
 
     def calculate_grad_loss(self, x, label, w_bc):
+        ''' Helper for step, computes the hinge loss and gradient of a single point '''
         xw = x.dot(w_bc.value)[0]
         if self.misclassification(xw, label):
             return self.gradient(x, label), self.loss_point(x, label, xw=xw)
@@ -70,11 +75,13 @@ class SVM:
             return 0, 0
 
     def loss_point(self, x, label, xw=None, w_bc=None):
+        ''' Computes the hinge loss of a single point'''
         if xw is None:
             xw = x.dot(w_bc.value)[0]
         return max(1 - label * xw, 0)
 
     def loss(self, data, w_bc=None, spark=None):
+        ''' Computes the total loss (incl regulizer) for a data set '''
         loss_point = self.loss_point
         if w_bc is None and spark is None:
             raise ValueError('w_bc and spark can\'t be None')
@@ -95,7 +102,7 @@ class SVM:
         return -x*label
 
     def misclassification(self, x_dot_w, label):
-        ''' Returns true if x is misclassified. '''
+        ''' Returns true if x is it's hingeloss would be > 0. '''
         return x_dot_w * label < 1
 
     def predict(self, data, w_bc=None, spark=None):
