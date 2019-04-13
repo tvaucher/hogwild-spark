@@ -15,15 +15,15 @@ from load_data import DataLoader
 import settings as s
 
 
-def fit_then_dump(data, learning_rate, lambda_reg, frac, niter=100):
+def fit_then_dump(data, learning_rate, lambda_reg, frac, niter=100, spark=None):
     start_time = time()
     model = SVM(learning_rate, lambda_reg, frac, s.dim)
-    fit_log = model.fit(data.training_set, data.validation_set, niter)
+    fit_log = model.fit(data.training_set, data.validation_set, niter, spark)
     end_time = time()
 
-    training_accuracy = model.predict(data.training_set)
-    validation_accuracy = model.predict(data.validation_set)
-    valdiation_loss = model.loss(data.validation_set)
+    training_accuracy = model.predict(data.training_set, spark=spark)
+    validation_accuracy = model.predict(data.validation_set, spark=spark)
+    valdiation_loss = model.loss(data.validation_set, spark=spark)
     # Save results in a log
     log = [{'start_time': datetime.utcfromtimestamp(start_time).strftime("%Y-%m-%d %H:%M:%S"),
             'end_time': datetime.utcfromtimestamp(end_time).strftime("%Y-%m-%d %H:%M:%S"),
@@ -40,7 +40,7 @@ def fit_then_dump(data, learning_rate, lambda_reg, frac, niter=100):
     return training_accuracy, validation_accuracy, valdiation_loss
 
 
-def grid_search(data, learning_rates, lambdas, batch_fracs):
+def grid_search(data, learning_rates, lambdas, batch_fracs, spark):
     values = [(
         'learning_rate',
         'lambda_reg',
@@ -53,7 +53,7 @@ def grid_search(data, learning_rates, lambdas, batch_fracs):
         for lambda_reg in lambdas:
             for frac in batch_fracs:
                 training_accuracy, validation_accuracy, valdiation_loss = fit_then_dump(
-                    data, learning_rate, lambda_reg, frac, niter=100)
+                    data, learning_rate, lambda_reg, frac, niter=100, spark=spark)
                 values.append((learning_rate, lambda_reg, frac,
                                training_accuracy, validation_accuracy, valdiation_loss))
 
@@ -71,11 +71,11 @@ if __name__ == "__main__":
 
     data = DataLoader(spark)
 
-    # fit_then_dump(data, s.learning_rate, s.lambda_reg, 0.02, 50)
+    fit_then_dump(data, s.learning_rate, s.lambda_reg, 0.01, 100, spark)
 
-    learning_rates = np.linspace(2.5, 4.5, 9)
-    batch_fracs = [0.005, 0.01]
-    lambdas = [1e-5, 5e-5, 1e-4]
-    grid_search(data, learning_rates, lambdas, batch_fracs)
+    # learning_rates = np.linspace(2.5, 4.5, 9)
+    # batch_fracs = [0.005, 0.01]
+    # lambdas = [1e-5, 5e-5, 1e-4]
+    # grid_search(data, learning_rates, lambdas, batch_fracs, spark)
 
     spark.stop()

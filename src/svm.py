@@ -11,27 +11,30 @@ class SVM:
         self.__lambda_reg = lambda_reg
         self.__batch_frac = batch_frac
         self.__dim = dim
-        self.__persistence = 15
+        self.__persistence = 20
         self.__w = np.zeros(dim)
 
-    def fit(self, data, validation, max_iter):
+    def fit(self, data, validation, max_iter, spark):
         reached_criterion = False
         early_stopping_window = []
         window_smallest = math.inf
         log = []
+        w_bc = spark.sparkContext.broadcast(self.__w)
         for i in range(max_iter):
             if not reached_criterion:
                 # Compute gradient and train loss
                 grad, train_loss = self.step(
-                    data.sample(False, self.__batch_frac))
-                self.__w -= self.__learning_rate * (grad.toarray().ravel() + self.l2_reg_grad())
+                    data.sample(False, self.__batch_frac), w_bc)
+                self.__w -= self.__learning_rate * (grad.toarray().ravel() + self.l2_reg_grad(w_bc))
+                w_bc = spark.sparkContext.broadcast(self.__w)
                 # Compute validation loss and accuracy
-                validation_loss = self.loss(validation)
-                validation_accuracy = self.predict(validation)
+                validation_loss = self.loss(validation, w_bc)
+                validation_accuracy = self.predict(validation, w_bc=w_bc)
 
                 # Logging
                 log_iter = {'iter': i, 'avg_train_loss': train_loss,
                             'validation_loss': validation_loss, 'validation_accuracy': validation_accuracy}
+                print(log_iter)
                 log.append(log_iter)
 
                 # Early stopping criterion
@@ -47,41 +50,45 @@ class SVM:
                     early_stopping_window.append(validation_loss)
         return log
 
-    def step(self, data):
+    def step(self, data, w_bc):
         '''
         Calculates the gradient and train loss.
         If the update flag is set to False, gradient is calculated but own weights will not be updated
         '''
-        gradient, train_loss = data.map(lambda x: self.calculate_grad_loss(
-            x[0], x[1])).reduce(lambda x, y: (x[0] + y[0], x[1] + y[1]))
+        calculate_grad_loss = self.calculate_grad_loss
+        gradient, train_loss = data.map(lambda x: calculate_grad_loss(
+            x[0], x[1], w_bc)).reduce(lambda x, y: (x[0] + y[0], x[1] + y[1]))
         gradient /= data.count()
 
-        return gradient, train_loss + self.l2_reg()
+        return gradient, train_loss + self.l2_reg(w_bc)
 
-    def calculate_grad_loss(self, x, label):
-        xw = x.dot(self.__w)[0]
+    def calculate_grad_loss(self, x, label, w_bc):
+        xw = x.dot(w_bc.value)[0]
         if self.misclassification(xw, label):
             return self.gradient(x, label), self.loss_point(x, label, xw=xw)
         else:
             return 0, 0
 
-    def loss_point(self, x, label, xw=None):
+    def loss_point(self, x, label, xw=None, w_bc=None):
         if xw is None:
-            xw = x.dot(self.__w)[0]
+            xw = x.dot(w_bc.value)[0]
         return max(1 - label * xw, 0)
 
-    def loss(self, data):
-        return data.map(lambda x: self.loss_point(x[0], x[1])).reduce(add) + self.l2_reg()
+    def loss(self, data, w_bc=None, spark=None):
+        loss_point = self.loss_point
+        if w_bc is None and spark is None:
+            raise ValueError('w_bc and spark can\'t be None')
+        if spark is not None:
+            w_bc = spark.sparkContext.broadcast(self.__w)
+        return data.map(lambda x: loss_point(x[0], x[1], w_bc=w_bc)).reduce(add) + self.l2_reg(w_bc)
 
-    def l2_reg(self):
+    def l2_reg(self, w_bc):
         ''' Returns the regularization term '''
-        w = self.__w
-        return self.__lambda_reg * (w ** 2).sum()
+        return self.__lambda_reg * (w_bc.value ** 2).sum()
 
-    def l2_reg_grad(self):
+    def l2_reg_grad(self, w_bc):
         '''Returns the gradient of the regularization term  '''
-        w = self.__w
-        return 2 * self.__lambda_reg * w
+        return 2 * self.__lambda_reg * w_bc.value
 
     def gradient(self, x, label):
         ''' Returns the gradient of the loss with respect to the weights '''
@@ -91,7 +98,11 @@ class SVM:
         ''' Returns true if x is misclassified. '''
         return x_dot_w * label < 1
 
-    def predict(self, data):
+    def predict(self, data, w_bc=None, spark=None):
         ''' Predict the labels of the input data '''
         sign = lambda x : 1 if x > 0 else -1 if x < 0 else 0
-        return data.map(lambda x: sign(x[0].dot(self.__w)) == x[1]).reduce(add)/data.count()
+        if w_bc is None and spark is None:
+            raise ValueError('w_bc and spark can\'t be None')
+        if spark is not None:
+            w_bc = spark.sparkContext.broadcast(self.__w)
+        return data.map(lambda x: sign(x[0].dot(w_bc.value)) == x[1]).reduce(add)/data.count()
