@@ -24,7 +24,7 @@ class DataLoader:
         self.training_set, self.validation_set = self.read_train_val_data()
         self.training_set.cache()
         self.validation_set.cache()
-        #self.test_set = self.read_test_data()
+        self.test_set = self.read_test_data()
 
     def read_category(self, category='CCAT'):
         topics_lines = self.spark.read.text(
