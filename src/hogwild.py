@@ -1,78 +1,81 @@
-from __future__ import print_function
-
 import sys
-import numpy as np
-from scipy.sparse import csr_matrix
-from os import path
+import json
+import csv
 
+from os import path
+from time import time
+from datetime import datetime
+
+import numpy as np
 from operator import add
 from pyspark.sql import SparkSession
 
-import csv
-
 from svm import SVM
+from load_data import DataLoader
 import settings as s
 
-def line_to_topic(r):
-    topic, doc_id, _ = r[0].strip().split(' ')
-    return int(doc_id), set([topic])
 
-def line_to_features(r):
-    r = r[0].strip().split(' ')
-    features = [feature.split(':') for feature in r[2:]]
-    col_idx = np.array([0] + [int(idx) + 1 for idx, _ in features])
-    row_idx = np.array([0]*(len(features) + 1))
-    data = np.array([1.] + [float(value) for _, value in features])
-    return int(r[0]), csr_matrix((data, (row_idx, col_idx)), shape=(1, s.dim))
+def fit_then_dump(data, learning_rate, lambda_reg, frac, niter=100):
+    start_time = time()
+    model = SVM(learning_rate, lambda_reg, frac, s.dim)
+    fit_log = model.fit(data.training_set, data.validation_set, niter)
+    end_time = time()
 
-def grid_search(training_set, validation_set, learning_rates, batch_sizes, lambdas):
+    training_accuracy = model.predict(data.training_set)
+    validation_accuracy = model.predict(data.validation_set)
+    valdiation_loss = model.loss(data.validation_set)
+    # Save results in a log
+    log = [{'start_time': datetime.utcfromtimestamp(start_time).strftime("%Y-%m-%d %H:%M:%S"),
+            'end_time': datetime.utcfromtimestamp(end_time).strftime("%Y-%m-%d %H:%M:%S"),
+            'running_time': end_time - start_time,
+            'training_accuracy': training_accuracy,
+            'validation_accuracy': validation_accuracy,
+            'validation_loss': valdiation_loss,
+            'fit_log': fit_log}]
 
-    values = []
+    logname = f'{datetime.utcfromtimestamp(end_time).strftime("%Y%m%d_%H%M%S")}_{learning_rate}_{lambda_reg}_{frac}_log.json'
+    with open(path.join(s.logpath, logname), 'w') as outfile:
+        json.dump(log, outfile)
+
+    return training_accuracy, validation_accuracy, valdiation_loss
+
+
+def grid_search(data, learning_rates, lambdas, batch_fracs):
+    values = [(
+        'learning_rate',
+        'lambda_reg',
+        'frac',
+        'training_accuracy',
+        'validation_accuracy',
+        'validation_loss'
+    )]
     for learning_rate in learning_rates:
-        for batch_size in batch_sizes:
-            for lambda_reg in lambdas:
-                print("new epoch")
-                model = SVM(learning_rate, lambda_reg, s.dim)
-                model.fit(training_set, validation_set, 10, batch_size=batch_size)
-                accuracy = model.predict(validation_set)
-                values.append((learning_rate, batch_size, lambda_reg, accuracy))
-    #ind = np.argmax(list(map(lambda x : x[3], values)))
+        for lambda_reg in lambdas:
+            for frac in batch_fracs:
+                training_accuracy, validation_accuracy, valdiation_loss = fit_then_dump(
+                    data, learning_rate, lambda_reg, frac, niter=100)
+                values.append((learning_rate, lambda_reg, frac,
+                               training_accuracy, validation_accuracy, valdiation_loss))
 
-    with open('grid_search_results.txt', 'w') as f:
+    with open(path.join(s.logpath, 'grid_search_results.csv'), 'w') as f:
         writer = csv.writer(f)
         writer.writerows(values)
+
 
 if __name__ == "__main__":
     spark = SparkSession\
         .builder\
-        .appName("Test App")\
+        .appName("Spark")\
         .getOrCreate()
+    spark.sparkContext.setLogLevel("ERROR")
 
-    topics_lines = spark.read.text(
-        path.join(s.path, 'datasets/rcv1-v2.topics.qrels')).rdd.map(line_to_topic)
-    doc_category = topics_lines.reduceByKey(lambda x, y: x | y).map(
-        lambda x: (x[0], 1) if 'CCAT' in x[1] else (x[0], -1)).persist()
+    data = DataLoader(spark)
 
-    train_lines = spark.read.text(path.join(s.path, 'datasets/lyrl2004_vectors_train.dat')).rdd.map(line_to_features)
+    #fit_then_dump(data, s.learning_rate, s.lambda_reg, 0.01, 50)
 
-    """test_lines = []
-    for i in range(4):
-        test_lines.append(spark.read.text(path.join(s.path, 'datasets/lyrl2004_vectors_test_pt'+str(i)+'.dat')))
-    test_lines = test_lines[0].union(test_lines[1]).union(test_lines[2]).union(test_lines[3])"""
-
-    training_set, validation_set = train_lines.join(doc_category).map(lambda x : (x[1][0], x[1][1])).randomSplit([1 - s.validation_frac, s.validation_frac], seed=1)
-    training_set.persist()
-    validation_set.persist()
-    """test_set = test_lines.rdd.map(line_to_features).join(doc_category).map(lambda x : (x[1][0], x[1][1])).persist()"""
-
-    model = SVM(s.learning_rate, s.lambda_reg, s.dim)
-    model.fit(training_set, validation_set, 100)
-    print('accuracy', model.predict(training_set))
-
-    learning_rates = [0.015, 0.020]
-    batch_sizes = [10]
-    lambdas =  [1e-5, 1e-4]
-
-    #grid_search(training_set, validation_set, learning_rates, batch_sizes, lambdas)
+    learning_rates = np.linspace(0.015, 0.045, 5)
+    batch_fracs = [0.005, 0.085, 0.01]
+    lambdas = [1e-5, 1e-4, 1e-3]
+    grid_search(data, learning_rates, lambdas, batch_fracs)
 
     spark.stop()
