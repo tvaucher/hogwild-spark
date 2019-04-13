@@ -26,10 +26,16 @@ bash docker-image-tool.sh -t tag push
 
 You first need to update the `GROUP_NAME` and `IMAGE` in `run.sh`
 
-Then to run the app (`-n` for the number of executor)
+Then to run the app (`-w` for the number of executor)
 
 ```bash
-bash run.sh -n 4
+bash run.sh -w 4
+```
+
+Alternatively one can combine the 2 steps (build / call) by using the additional args
+
+```bash
+bash run.sh -w 4 -t tag -n AppName -b
 ```
 
 ## Get the logs
