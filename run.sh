@@ -1,7 +1,15 @@
 GROUP_NAME=cs449g13
-APP_NAME=pyspark-test
+APP_NAME=spark-svm
 NB_EXECUTOR=4
-IMAGE=tvaucher/svm-spark:latest
+IMAGE=tvaucher/svm-spark:run1
+
+while getopts ":n:" opt; do
+  case $opt in
+    n) NB_EXECUTOR="$OPTARG";; # number workers
+    \?) echo "Invalid option -$OPTARG" >&2
+    ;;
+  esac
+done
 
 kubectl delete pod $APP_NAME
 spark-submit \
