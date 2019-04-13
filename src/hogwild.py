@@ -24,6 +24,7 @@ def fit_then_dump(data, learning_rate, lambda_reg, frac, niter=100, spark=None):
     training_accuracy = model.predict(data.training_set, spark=spark)
     validation_accuracy = model.predict(data.validation_set, spark=spark)
     valdiation_loss = model.loss(data.validation_set, spark=spark)
+    test_accuracy = model.predict(data.test_set, spark=spark)
     # Save results in a log
     log = [{'start_time': datetime.utcfromtimestamp(start_time).strftime("%Y-%m-%d %H:%M:%S"),
             'end_time': datetime.utcfromtimestamp(end_time).strftime("%Y-%m-%d %H:%M:%S"),
@@ -31,7 +32,10 @@ def fit_then_dump(data, learning_rate, lambda_reg, frac, niter=100, spark=None):
             'training_accuracy': training_accuracy,
             'validation_accuracy': validation_accuracy,
             'validation_loss': valdiation_loss,
-            'fit_log': fit_log}]
+            'test_accuracy': test_accuracy,
+            'fit_log': fit_log,
+            'weights': model.getW().tolist()
+            }]
 
     logname = f'{datetime.utcfromtimestamp(end_time).strftime("%Y%m%d_%H%M%S")}_{learning_rate}_{lambda_reg}_{frac}_log.json'
     with open(path.join(s.logpath, logname), 'w') as outfile:
@@ -71,7 +75,7 @@ if __name__ == "__main__":
 
     data = DataLoader(spark)
 
-    fit_then_dump(data, s.learning_rate, s.lambda_reg, 0.01, 100, spark)
+    fit_then_dump(data, s.learning_rate, s.lambda_reg, s.batch_frac, 1000, spark)
 
     # learning_rates = np.linspace(2.5, 4.5, 9)
     # batch_fracs = [0.005, 0.01]
