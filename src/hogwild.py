@@ -71,11 +71,11 @@ if __name__ == "__main__":
 
     data = DataLoader(spark)
 
-    #fit_then_dump(data, s.learning_rate, s.lambda_reg, 0.01, 50)
+    # fit_then_dump(data, s.learning_rate, s.lambda_reg, 0.02, 50)
 
-    learning_rates = np.linspace(0.015, 0.045, 5)
-    batch_fracs = [0.005, 0.085, 0.01]
-    lambdas = [1e-5, 1e-4, 1e-3]
+    learning_rates = np.linspace(2.5, 4.5, 9)
+    batch_fracs = [0.005, 0.01]
+    lambdas = [1e-5, 5e-5, 1e-4]
     grid_search(data, learning_rates, lambdas, batch_fracs)
 
     spark.stop()

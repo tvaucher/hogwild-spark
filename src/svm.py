@@ -24,8 +24,7 @@ class SVM:
                 # Compute gradient and train loss
                 grad, train_loss = self.step(
                     data.sample(False, self.__batch_frac))
-                self.__w += self.__learning_rate * grad.toarray().ravel()
-
+                self.__w -= self.__learning_rate * (grad.toarray().ravel() + self.l2_reg_grad())
                 # Compute validation loss and accuracy
                 validation_loss = self.loss(validation)
                 validation_accuracy = self.predict(validation)
@@ -33,7 +32,6 @@ class SVM:
                 # Logging
                 log_iter = {'iter': i, 'avg_train_loss': train_loss,
                             'validation_loss': validation_loss, 'validation_accuracy': validation_accuracy}
-                # print(log_iter)
                 log.append(log_iter)
 
                 # Early stopping criterion
@@ -56,50 +54,44 @@ class SVM:
         '''
         gradient, train_loss = data.map(lambda x: self.calculate_grad_loss(
             x[0], x[1])).reduce(lambda x, y: (x[0] + y[0], x[1] + y[1]))
-        train_loss /= data.count()
+        gradient /= data.count()
 
-        return gradient, train_loss
+        return gradient, train_loss + self.l2_reg()
 
     def calculate_grad_loss(self, x, label):
         xw = x.dot(self.__w)[0]
-        if self.__misclassification(xw, label):
-            delta_w = self.__gradient(x, label)
+        if self.misclassification(xw, label):
+            return self.gradient(x, label), self.loss_point(x, label, xw=xw)
         else:
-            delta_w = self.__regularization_gradient(x)
-        return delta_w, self.loss_point(x, label, xw=xw)
+            return 0, 0
 
     def loss_point(self, x, label, xw=None):
         if xw is None:
             xw = x.dot(self.__w)[0]
-        return max(1 - label * xw, 0) + self.__regularizer(x)
+        return max(1 - label * xw, 0)
 
     def loss(self, data):
-        return data.map(lambda x: self.loss_point(x[0], x[1])).reduce(add)
+        return data.map(lambda x: self.loss_point(x[0], x[1])).reduce(add) + self.l2_reg()
 
-    def __regularizer(self, x):
+    def l2_reg(self):
         ''' Returns the regularization term '''
         w = self.__w
-        return self.__lambda_reg * (w[x.indices]**2).sum()/x.nnz
+        return self.__lambda_reg * (w ** 2).sum()
 
-    def __regularizer_g(self, x):
+    def l2_reg_grad(self):
         '''Returns the gradient of the regularization term  '''
         w = self.__w
-        return 2 * self.__lambda_reg * w[x.indices].sum()/x.nnz
+        return 2 * self.__lambda_reg * w
 
-    def __gradient(self, x, label):
+    def gradient(self, x, label):
         ''' Returns the gradient of the loss with respect to the weights '''
-        grad = x.copy() * label
-        grad.data -= self.__regularizer_g(x)
-        return grad
+        return -x*label
 
-    def __regularization_gradient(self, x):
-        ''' Returns the gradient of the regularization term for each datapoint '''
-        return csr_matrix((np.array([-self.__regularizer_g(x)]*x.nnz), x.indices, x.indptr), (1, self.__dim))
-
-    def __misclassification(self, x_dot_w, label):
+    def misclassification(self, x_dot_w, label):
         ''' Returns true if x is misclassified. '''
         return x_dot_w * label < 1
 
     def predict(self, data):
         ''' Predict the labels of the input data '''
-        return data.map(lambda x: np.sign(x[0].dot(self.__w)) == x[1]).reduce(add)/data.count()
+        sign = lambda x : 1 if x > 0 else -1 if x < 0 else 0
+        return data.map(lambda x: sign(x[0].dot(self.__w)) == x[1]).reduce(add)/data.count()
