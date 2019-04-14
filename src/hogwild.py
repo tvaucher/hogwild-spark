@@ -61,7 +61,7 @@ def grid_search(data, learning_rates, lambdas, batch_fracs, spark):
                 values.append((learning_rate, lambda_reg, frac,
                                training_accuracy, validation_accuracy, valdiation_loss))
 
-    with open(path.join(s.logpath, 'grid_search_results.csv'), 'w') as f:
+    with open(path.join(s.logpath, datetime.utcfromtimestamp(time()).strftime("%Y%m%d_%H%M%S") + '_grid_search_results.csv'), 'w') as f:
         writer = csv.writer(f)
         writer.writerows(values)
 
@@ -77,9 +77,10 @@ if __name__ == "__main__":
 
     fit_then_dump(data, s.learning_rate, s.lambda_reg, s.batch_frac, 1000, spark)
 
-    # learning_rates = np.linspace(2.5, 4.5, 9)
-    # batch_fracs = [0.005, 0.01]
-    # lambdas = [1e-5, 5e-5, 1e-4]
-    # grid_search(data, learning_rates, lambdas, batch_fracs, spark)
+    # learning_rates = [0.005, 0.01, 0.015, 0.02, 0.03, 0.04, 0.05]
+    # batch_fracs = [0.005, 0.01, 0.02]
+    # lambdas = [1e-6, 1e-5, 1e-4, 1e-3]
+    # for i in range(4):
+    #     grid_search(data, learning_rates, lambdas, batch_fracs, spark)
 
     spark.stop()
