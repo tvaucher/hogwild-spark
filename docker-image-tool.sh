@@ -53,17 +53,17 @@ function build {
   local BINDING_BUILD_ARGS=(
     ${BUILD_PARAMS}
     --build-arg
-    base_img=$(image_ref svm-spark)
+    base_img=$(image_ref ${NAME})
   )
   local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/Dockerfile"}
 
   docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
-    -t $(image_ref svm-spark) \
+    -t $(image_ref ${NAME}) \
     -f "$BASEDOCKERFILE" .
 }
 
 function push {
-  docker push "$(image_ref svm-spark)"
+  docker push "$(image_ref ${NAME})"
 }
 
 function usage {
@@ -117,7 +117,8 @@ PYDOCKERFILE=
 RDOCKERFILE=
 NOCACHEARG=
 BUILD_PARAMS=
-while getopts f:p:R:mr:t:nb: option
+NAME=svm-spark
+while getopts f:p:R:mr:t:a:nb: option
 do
  case "${option}"
  in
@@ -126,6 +127,7 @@ do
  R) RDOCKERFILE=${OPTARG};;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
+ a) NAME=${OPTARG};;
  n) NOCACHEARG="--no-cache";;
  b) BUILD_PARAMS=${BUILD_PARAMS}" --build-arg "${OPTARG};;
  m)
