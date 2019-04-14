@@ -1,9 +1,13 @@
 import numpy as np
 from operator import add
 from scipy.sparse import csr_matrix
-from scipy.sparse.linalg import norm
 import math
+from time import time
 
+# NOTE : It is possible to use the normal hinge loss :
+# L(w) = \lambda*||w||^2 + 1/B * sum max(0, 1 - y*(x dot w))
+# By commenting the lines for the sparse hinge loss from HOGWILD!
+# and uncommenting the other ones. One should then adapt the hyperparms
 
 class SVM:
     def __init__(self, learning_rate, lambda_reg, batch_frac, dim):
@@ -25,6 +29,7 @@ class SVM:
         window_smallest = math.inf
         log = []
         w_bc = spark.sparkContext.broadcast(self.__w)
+        start_time = time()
         for i in range(max_iter):
             if not reached_criterion:
                 # Compute gradient and train loss
@@ -35,11 +40,11 @@ class SVM:
                 w_bc = spark.sparkContext.broadcast(self.__w)
                 # Compute validation loss and accuracy
                 validation_loss = self.loss(validation, w_bc=w_bc)
-                validation_accuracy = self.predict(validation, w_bc=w_bc)
+                # validation_accuracy = self.predict(validation, w_bc=w_bc)
 
                 # Logging
-                log_iter = {'iter': i, 'avg_train_loss': train_loss,
-                            'validation_loss': validation_loss, 'validation_accuracy': validation_accuracy}
+                log_iter = {'iter': i, 'time' : time() - start_time, 'avg_train_loss': train_loss,
+                            'validation_loss': validation_loss} # , 'validation_accuracy': validation_accuracy}
                 # print(log_iter)
                 log.append(log_iter)
 
@@ -64,6 +69,7 @@ class SVM:
         gradient, train_loss = data.map(lambda x: calculate_grad_loss(
             x[0], x[1], w_bc)).reduce(lambda x, y: (x[0] + y[0], x[1] + y[1]))
         train_loss /= data.count()
+        # gradient /= data.count()
 
         return gradient, train_loss  # + self.l2_reg(w_bc)
 
@@ -115,10 +121,11 @@ class SVM:
         # return -x*label
 
     def reg_gradient(self, w_bc, x):
+        ''' Sparse matrice loss, gradient of regularizer '''
         return csr_matrix((np.array([-self.l2_reg_grad(w_bc, x)]*x.nnz), x.indices, x.indptr), (1, self.__dim))
 
     def misclassification(self, x_dot_w, label):
-        ''' Returns true if x is it's hingeloss would be > 0. '''
+        ''' Returns true if, for a given point, its hingeloss would be > 0. '''
         return x_dot_w * label < 1
 
     def predict(self, data, w_bc=None, spark=None):
