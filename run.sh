@@ -30,10 +30,11 @@ spark-submit \
     --conf spark.executor.instances=$NB_EXECUTOR \
     --conf spark.kubernetes.namespace=$GROUP_NAME \
     --conf spark.kubernetes.driver.pod.name=$APP_NAME \
-	--conf spark.kubernetes.driver.volumes.persistentVolumeClaim.volume1.options.claimName=$GROUP_NAME-scratch \
-	--conf spark.kubernetes.executor.volumes.persistentVolumeClaim.volume1.options.claimName=$GROUP_NAME-scratch \
+	  --conf spark.kubernetes.driver.volumes.persistentVolumeClaim.volume1.options.claimName=$GROUP_NAME-scratch \
+	  --conf spark.kubernetes.executor.volumes.persistentVolumeClaim.volume1.options.claimName=$GROUP_NAME-scratch \
     --conf spark.kubernetes.driver.volumes.persistentVolumeClaim.volume1.mount.path=/data \
-	--conf spark.kubernetes.executor.volumes.persistentVolumeClaim.volume1.mount.path=/data \
+	  --conf spark.kubernetes.executor.volumes.persistentVolumeClaim.volume1.mount.path=/data \
     --conf spark.kubernetes.container.image=$IMAGE \
     --conf spark.kubernetes.authenticate.driver.serviceAccountName=spark \
+    --conf spark.kubernetes.pyspark.pythonVersion="3" \
     local:///opt/spark/work-dir/hogwild.py
